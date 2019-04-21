@@ -134,7 +134,7 @@ namespace PhotoSeparator
 
         private void SortExistingPhotosIntoCorrectFolder()
         {
-            var path = @"G:\\Photos\\";
+            var path = System.IO.Directory.GetCurrentDirectory();
 
             if (File.Exists(path))
             {
@@ -144,7 +144,10 @@ namespace PhotoSeparator
             else if (System.IO.Directory.Exists(path))
             {
                 // This path is a directory
-                ProcessDirectory(path);
+                if (!path.ToLower().Contains("sorted"))
+                {
+                    ProcessDirectory(path);
+                }
             }
             else
             {
@@ -171,7 +174,7 @@ namespace PhotoSeparator
         public void ProcessFile(string path)
         {
             Console.WriteLine("Processed file '{0}'.", path);
-            SortFileIntoFolder(path, @"G:\\Photos\\Sorted\\");
+            SortFileIntoFolder(path, System.IO.Directory.GetCurrentDirectory() + "\\Sorted\\");
         }
     }
 }
