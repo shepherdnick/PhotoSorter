@@ -1,5 +1,6 @@
 ﻿using MetadataExtractor;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 
@@ -17,45 +18,30 @@ namespace PhotoSeparator
     {
         public PhotoSorter()
         {
-            //SortPhotosIntoFolders();
             SortExistingPhotosIntoCorrectFolder();
-        }
-
-        private void SortPhotosIntoFolders()
-        {
-            int folderNumber = 1;
-
-            while (folderNumber < 20)
-            {
-                var path = @"D:\\Photos\\data-download-" + folderNumber + "\\";
-                folderNumber++;
-
-                string[] files = System.IO.Directory.GetFiles(path);
-
-                foreach (var file in files)
-                {
-                    //string file = @"D:\\Photos\\data-download-1\\01022008_2265470602_o.jpg";
-                    SortFileIntoFolder(file, "D:\\Photos\\Sorted\\");
-
-                    Console.WriteLine("=======================================================");
-                }
-            }
-
-            Console.ReadLine();
         }
 
         private void SortFileIntoFolder(string file, string destinationPath)
         {
+            // Try to safely read the image file
+            IReadOnlyList<MetadataExtractor.Directory> directories = new List<MetadataExtractor.Directory>();
+
             try
             {
                 var tryToGetDirectories = ImageMetadataReader.ReadMetadata(file);
+                directories = tryToGetDirectories;
             }
             catch (Exception ex)
             {
+                // If the read meta data failed, we might be inspecting a .mov file
+                if (file.ToLower().EndsWith(".mov"))
+                {
+                    FileInfo fileInfo = new FileInfo(file);
+                    MoveFile(file, fileInfo.LastWriteTimeUtc.ToString(), destinationPath);
+                }
+
                 return;
             }
-
-            var directories = ImageMetadataReader.ReadMetadata(file);
 
             foreach (var directory in directories)
             {
@@ -64,63 +50,11 @@ namespace PhotoSeparator
                     Console.WriteLine($"[{directory.Name}] {tag.Name} = {tag.Description}");
 
                     // Find the EXIF data for the image
-                    if (tag.Name.Equals("Date/Time Original"))
+                    if (tag.Name.Equals("Date/Time Original") || tag.Name.Equals("Created"))
                     {
                         Console.WriteLine($"[{directory.Name}] {tag.Name} = {tag.Description}");
-
-                        // Parse the EXIF data for the created date into a date we can use
-                        var fileDateTime = DateTime.ParseExact(tag.Description, "yyyy:MM:dd HH:mm:ss", new CultureInfo("en-GB"));
-                        
-                        // Create the destination folder
-                        var destinationDirectory = @"" + destinationPath + fileDateTime.Year + "-" + fileDateTime.Month + "-" + fileDateTime.Day;
-                        Console.WriteLine(destinationDirectory);
-
-                        // Check the destination directory exists
-                        if (!System.IO.Directory.Exists(destinationDirectory))
-                        {
-                            System.IO.Directory.CreateDirectory(destinationDirectory);
-                        }
-
-                        // Knowing the directory exists, we can now move the file
-                        if (File.Exists(file))
-                        {
-                            var destinationFile = destinationDirectory + "\\" + Path.GetFileName(file);
-
-                            if (File.Exists(destinationFile))
-                            {
-                                Random random = new Random();
-                                var randomNumber = random.Next(100);
-                                destinationFile = "" + Path.GetDirectoryName(file) + "\\" + Path.GetFileNameWithoutExtension(file) + randomNumber + Path.GetExtension(file);
-                            }
-
-                            File.Move(file, destinationFile);
-                        }
-                    }
-
-                    // If the EXIF data tag wasn't found, find a new one (usually used for movie files)
-                    if (tag.Name.Equals("Created"))
-                    {
-                        Console.WriteLine($"[{directory.Name}] {tag.Name} = {tag.Description}");
-                        //Fri Apr 01 04:25:42 2011
-
-                        // Parse the EXIF data for the created date into a date we can use
-                        var fileDateTime = DateTime.ParseExact(tag.Description, "ddd MMM dd HH:mm:ss yyyy", new CultureInfo("en-GB"));
-
-                        // Create the destination folder
-                        var destinationDirectory = @"D:\\Photos\\Sorted\\" + fileDateTime.Year + "-" + fileDateTime.Month + "-" + fileDateTime.Day;
-                        Console.WriteLine(destinationDirectory);
-
-                        // Check the destination directory exists
-                        if (!System.IO.Directory.Exists(destinationDirectory))
-                        {
-                            System.IO.Directory.CreateDirectory(destinationDirectory);
-                        }
-
-                        // Knowing the directory exists, we can now move the file
-                        if (File.Exists(file))
-                        {
-                            File.Move(file, destinationDirectory + "\\" + Path.GetFileName(file));
-                        }
+                        MoveFile(file, tag.Description, destinationPath);
+                        return;
                     }
                 }
 
@@ -128,6 +62,51 @@ namespace PhotoSeparator
                 {
                     foreach (var error in directory.Errors)
                         Console.WriteLine($"ERROR: {error}");
+                }
+            }
+        }
+
+        private void MoveFile(string file, string dateTimeOnFile, string destinationPath)
+        {
+            // Parse the EXIF data for the created date into a date we can use
+            DateTime fileDateTime = DateTime.Now;
+            try
+            {
+                // Get the date time format for the jpg
+                fileDateTime = DateTime.ParseExact(dateTimeOnFile, "yyyy:MM:dd HH:mm:ss", new CultureInfo("en-GB"));
+            }
+            catch (FormatException fmex)
+            {
+                try
+                {
+                    // Newer .mov files have a date time format like this
+                    fileDateTime = DateTime.ParseExact(dateTimeOnFile, "ddd MMM dd HH:mm:ss yyyy", new CultureInfo("en-GB"));
+                }
+                catch(FormatException fmexcep)
+                {
+                    // Just try an parse older .mov date time formats
+                    fileDateTime = DateTime.Parse(dateTimeOnFile);
+                }
+            }            
+
+            // Create the destination folder
+            var destinationDirectory = @"" + destinationPath + fileDateTime.Year + "-" + fileDateTime.Month + "-" + fileDateTime.Day;
+            Console.WriteLine(destinationDirectory);
+
+            // Check the destination directory exists
+            if (!System.IO.Directory.Exists(destinationDirectory))
+            {
+                System.IO.Directory.CreateDirectory(destinationDirectory);
+            }
+
+            // Knowing the directory exists, we can now move the file
+            if (File.Exists(file))
+            {
+                var destinationFile = destinationDirectory + "\\" + Path.GetFileName(file);
+
+                if (File.Exists(destinationFile))
+                {
+                    File.Move(file, destinationFile);
                 }
             }
         }
