@@ -173,6 +173,13 @@ namespace PhotoSeparator
         public void ProcessFile(string path)
         {
             Console.WriteLine("Processed file '{0}'.", path);
+
+            if (path.ToLower().Contains("picasa") || path.ToLower().Contains("thumb"))
+            {
+                File.Delete(path);
+                return;
+            }
+
             var separator = Path.DirectorySeparatorChar;
             var destinationFolder = $"{System.IO.Directory.GetCurrentDirectory()}{separator}Sorted{separator}";
             SortFileIntoFolder(path, destinationFolder);
