@@ -91,7 +91,7 @@ namespace PhotoSeparator
 
             // Create the destination folder
             var destinationDirectory = @"" + destinationPath + fileDateTime.Year + "-" + fileDateTime.Month + "-" + fileDateTime.Day;
-            Console.WriteLine(destinationDirectory);
+            Console.WriteLine($"Destination directory: {destinationDirectory}");
 
             // Check the destination directory exists
             if (!System.IO.Directory.Exists(destinationDirectory))
@@ -102,12 +102,17 @@ namespace PhotoSeparator
             // Knowing the directory exists, we can now move the file
             if (File.Exists(file))
             {
-                var destinationFile = destinationDirectory + "\\" + Path.GetFileName(file);
+                var separator = Path.DirectorySeparatorChar;
+                var destinationFile = $"{destinationDirectory}{separator}{Path.GetFileName(file)}";
 
                 if (File.Exists(destinationFile))
                 {
-                    File.Move(file, destinationFile);
+                    Random random = new Random();
+                    var randomNumber = random.Next(100);
+                    destinationFile = "" + destinationDirectory + separator + Path.GetFileNameWithoutExtension(file) + randomNumber + Path.GetExtension(file);
                 }
+
+                File.Move(file, destinationFile);
             }
         }
 
@@ -138,6 +143,11 @@ namespace PhotoSeparator
         // that are found, and process the files they contain.
         public void ProcessDirectory(string targetDirectory)
         {
+            // Ignore already sorted folders
+            if (targetDirectory.ToLower().Contains("sorted")) {
+                return;
+            }
+
             // Process the list of files found in the directory.
             string[] fileEntries = System.IO.Directory.GetFiles(targetDirectory);
             foreach (string fileName in fileEntries)
@@ -146,14 +156,26 @@ namespace PhotoSeparator
             // Recurse into subdirectories of this directory.
             string[] subdirectoryEntries = System.IO.Directory.GetDirectories(targetDirectory);
             foreach (string subdirectory in subdirectoryEntries)
+            {
                 ProcessDirectory(subdirectory);
+
+                // Now check that this subdirectory is empty of files, then delete it 
+                // (makes it easier to keep track of files that haven't been copied)
+                string[] fileList = System.IO.Directory.GetFiles(subdirectory);
+                if (fileList.Length == 0)
+                {
+                    System.IO.Directory.Delete(subdirectory);
+                }
+            }
         }
 
         // Insert logic for processing found files here.
         public void ProcessFile(string path)
         {
             Console.WriteLine("Processed file '{0}'.", path);
-            SortFileIntoFolder(path, System.IO.Directory.GetCurrentDirectory() + "\\Sorted\\");
+            var separator = Path.DirectorySeparatorChar;
+            var destinationFolder = $"{System.IO.Directory.GetCurrentDirectory()}{separator}Sorted{separator}";
+            SortFileIntoFolder(path, destinationFolder);
         }
     }
 }
