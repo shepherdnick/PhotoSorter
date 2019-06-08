@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace PhotoSeparator
 {
@@ -31,13 +32,14 @@ namespace PhotoSeparator
                 var tryToGetDirectories = ImageMetadataReader.ReadMetadata(file);
                 directories = tryToGetDirectories;
             }
-            catch (Exception ex)
+            catch
             {
                 // If the read meta data failed, we might be inspecting a .mov file
                 if (file.ToLower().EndsWith(".mov"))
                 {
                     FileInfo fileInfo = new FileInfo(file);
-                    MoveFile(file, fileInfo.LastWriteTimeUtc.ToString(), destinationPath);
+                    var lastWriteDateTime = ParseDateTime(fileInfo.LastWriteTimeUtc.ToString());
+                    MoveFile(file, lastWriteDateTime, destinationPath);
                 }
 
                 return;
@@ -45,16 +47,77 @@ namespace PhotoSeparator
 
             foreach (var directory in directories)
             {
+                // Find the EXIF data for the image
                 foreach (var tag in directory.Tags)
                 {
                     Console.WriteLine($"[{directory.Name}] {tag.Name} = {tag.Description}");
 
-                    // Find the EXIF data for the image
-                    if (tag.Name.Equals("Date/Time Original") || tag.Name.Equals("Created"))
+                    if (tag.Name.Equals("Date/Time Original"))
                     {
-                        Console.WriteLine($"[{directory.Name}] {tag.Name} = {tag.Description}");
-                        MoveFile(file, tag.Description, destinationPath);
-                        return;
+                        try {
+                            var parsedDateTime = ParseDateTime(tag.Description);
+                            MoveFile(file, parsedDateTime, destinationPath);
+                            return;
+                        } 
+                        catch
+                        {
+
+                        }
+                    }
+                    else if (tag.Name.Equals("Created"))
+                    {
+                        try
+                        {
+                            var parsedDateTime = ParseDateTime(tag.Description);
+                            MoveFile(file, parsedDateTime, destinationPath);
+                            return;
+                        }
+                        catch
+                        {
+
+                        }
+                    }
+                    else if (tag.Name.Equals("File Name"))
+                    {
+                        try
+                        {
+                            Regex regex = new Regex(@"(\d\d)*-(\d\d)*-(\d\d)*");
+                            Match match = regex.Match(tag.Description);
+
+                            if (match.Success)
+                            {
+                                var parsedDateTime = ParseDateTime(match.Value);
+                                MoveFile(file, parsedDateTime, destinationPath);
+                                return;
+                            }
+
+                            regex = new Regex(@"(\d\d\d\d20\d\d)*");
+                            match = regex.Match(tag.Description);
+
+                            if (match.Success)
+                            {
+                                var parsedDateTime = ParseDateTime(match.Value);
+                                MoveFile(file, parsedDateTime, destinationPath);
+                                return;
+                            }
+                        }
+                        catch
+                        {
+
+                        }
+                    }
+                    else if (tag.Name.Equals("File Modified Date"))
+                    {
+                        try
+                        {
+                            var parsedDateTime = ParseDateTime(tag.Description);
+                            MoveFile(file, parsedDateTime, destinationPath);
+                            return;
+                        }
+                        catch
+                        {
+
+                        }
                     }
                 }
 
@@ -66,31 +129,29 @@ namespace PhotoSeparator
             }
         }
 
-        private void MoveFile(string file, string dateTimeOnFile, string destinationPath)
+        private DateTime ParseDateTime(string dateTimeToParse)
         {
             // Parse the EXIF data for the created date into a date we can use
-            DateTime fileDateTime = DateTime.Now;
-            try
-            {
-                // Get the date time format for the jpg
-                fileDateTime = DateTime.ParseExact(dateTimeOnFile, "yyyy:MM:dd HH:mm:ss", new CultureInfo("en-GB"));
-            }
-            catch (FormatException fmex)
-            {
-                try
-                {
-                    // Newer .mov files have a date time format like this
-                    fileDateTime = DateTime.ParseExact(dateTimeOnFile, "ddd MMM dd HH:mm:ss yyyy", new CultureInfo("en-GB"));
-                }
-                catch(FormatException fmexcep)
-                {
-                    // Just try an parse older .mov date time formats
-                    fileDateTime = DateTime.Parse(dateTimeOnFile);
-                }
-            }            
+            DateTime fileDateTime;
 
+            var dateTimeFormatList = new List<string>();
+            dateTimeFormatList.Add("yyyy:MM:dd HH:mm:ss");
+            dateTimeFormatList.Add("ddd MMM dd HH:mm:ss %K yyyy");// Sat Feb 02 13:22:34 + 00:00 2019
+            dateTimeFormatList.Add("ddd MMM dd HH:mm:ss yyyy");
+            dateTimeFormatList.Add("ddd MMM dd HH:mm:ss zzz yyyy");
+            dateTimeFormatList.Add("dd-MM-yy");
+            dateTimeFormatList.Add("ddMMyyyy");
+
+            if (DateTime.TryParseExact(dateTimeToParse, dateTimeFormatList.ToArray(), new CultureInfo("en-GB"), DateTimeStyles.None, out fileDateTime))
+                return fileDateTime;
+
+            throw new FormatException("DateTime provided was not in a format that was recognized");
+        }
+
+        private void MoveFile(string file, DateTime dateTimeOnFile, string destinationPath)
+        {   
             // Create the destination folder
-            var destinationDirectory = @"" + destinationPath + fileDateTime.Year + "-" + fileDateTime.Month + "-" + fileDateTime.Day;
+            var destinationDirectory = @"" + destinationPath + dateTimeOnFile.Year + "-" + dateTimeOnFile.Month + "-" + dateTimeOnFile.Day;
             Console.WriteLine($"Destination directory: {destinationDirectory}");
 
             // Check the destination directory exists
@@ -139,12 +200,15 @@ namespace PhotoSeparator
             }
         }
 
-        // Process all files in the directory passed in, recurse on any directories 
-        // that are found, and process the files they contain.
+        /// <summary>
+        /// Process all files in the directory passed in, recurse on any directories 
+        /// that are found, and process the files they contain.
+        /// </summary>
+        /// <param name="targetDirectory">Target directory.</param>
         public void ProcessDirectory(string targetDirectory)
         {
             // Ignore already sorted folders
-            if (targetDirectory.ToLower().Contains("sorted")) {
+            if (targetDirectory.ToLower().Equals("sorted")) {
                 return;
             }
 
@@ -169,7 +233,10 @@ namespace PhotoSeparator
             }
         }
 
-        // Insert logic for processing found files here.
+        /// <summary>
+        /// Processes the file. Deletes parent folder if empty.
+        /// </summary>
+        /// <param name="path">Path.</param>
         public void ProcessFile(string path)
         {
             Console.WriteLine("Processed file '{0}'.", path);
