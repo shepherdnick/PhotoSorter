@@ -141,6 +141,7 @@ namespace PhotoSeparator
             dateTimeFormatList.Add("ddd MMM dd HH:mm:ss zzz yyyy");
             dateTimeFormatList.Add("dd-MM-yy");
             dateTimeFormatList.Add("ddMMyyyy");
+            dateTimeFormatList.Add("dd/MM/yyyy HH:mm:ss");// 24/02/2005 20:24:24
 
             if (DateTime.TryParseExact(dateTimeToParse, dateTimeFormatList.ToArray(), new CultureInfo("en-GB"), DateTimeStyles.None, out fileDateTime))
                 return fileDateTime;
@@ -228,7 +229,11 @@ namespace PhotoSeparator
                 string[] fileList = System.IO.Directory.GetFiles(subdirectory);
                 if (fileList.Length == 0)
                 {
-                    System.IO.Directory.Delete(subdirectory);
+                    try
+                    {
+                        System.IO.Directory.Delete(subdirectory);
+                    }
+                    catch { }
                 }
             }
         }
